@@ -29,5 +29,8 @@ jobs:
           push: true
           tags: bunker.mantracare.com/lovable/mood:1.0
           platforms: linux/amd64
+          build-args: |
+            VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
+            VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
