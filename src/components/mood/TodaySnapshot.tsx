@@ -1,16 +1,40 @@
+import { useState, useEffect, useMemo } from "react";
 import { MoodEntry, MOODS, getMoodColor } from "@/types/mood";
-import { getTodayEntries, formatTimeIST } from "@/lib/moodStorage";
-import { useState, useMemo } from "react";
+import { getUserId } from "@/lib/auth";
+import { getMoodLogs } from "@/lib/db";
+import { formatTimeIST } from "@/lib/moodStorage";
 
 interface TodaySnapshotProps {
   refreshKey: number;
 }
 
 const TodaySnapshot = ({ refreshKey }: TodaySnapshotProps) => {
-  const entries = useMemo(() => getTodayEntries(), [refreshKey]);
+  const [allEntries, setAllEntries] = useState<MoodEntry[]>([]);
+  const [loading, setLoading] = useState(true);
   const [tooltip, setTooltip] = useState<MoodEntry | null>(null);
 
-  if (entries.length === 0) return null;
+  useEffect(() => {
+    const fetchEntries = async () => {
+      const userId = getUserId();
+      if (!userId) return;
+      try {
+        const data = await getMoodLogs(userId);
+        setAllEntries(data);
+      } catch (error) {
+        console.error("Failed to fetch today's mood logs:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchEntries();
+  }, [refreshKey]);
+
+  const entries = useMemo(() => {
+    const today = new Date().toDateString();
+    return allEntries.filter((e) => new Date(e.timestamp).toDateString() === today);
+  }, [allEntries]);
+
+  if (loading || entries.length === 0) return null;
 
   const moodCounts: Record<string, number> = {};
   let urgeCount = 0;

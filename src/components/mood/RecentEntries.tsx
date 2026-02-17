@@ -1,6 +1,9 @@
-import { useMemo, useState, useRef } from "react";
-import { MoodEntry, MOODS, INTENSITY_LABELS, getMoodColor } from "@/types/mood";
-import { getEntries, removeEntry, formatTimeIST } from "@/lib/moodStorage";
+import { useEffect, useState, useRef } from "react";
+import { MoodEntry, MOODS, getMoodColor } from "@/types/mood";
+import { getUserId } from "@/lib/auth";
+import { getMoodLogs, deleteMoodLog } from "@/lib/db";
+import { formatTimeIST } from "@/lib/moodStorage";
+import { toast } from "sonner";
 
 interface RecentEntriesProps {
   refreshKey: number;
@@ -9,26 +12,57 @@ interface RecentEntriesProps {
 }
 
 const RecentEntries = ({ refreshKey, onRefresh, onOpenHistory }: RecentEntriesProps) => {
-  const entries = useMemo(() => getEntries().slice(0, 5), [refreshKey]);
+  const [entries, setEntries] = useState<MoodEntry[]>([]);
+  const [loading, setLoading] = useState(true);
 
+  useEffect(() => {
+    const fetchEntries = async () => {
+      const userId = getUserId();
+      if (!userId) return;
+      try {
+        const data = await getMoodLogs(userId);
+        setEntries(data.slice(0, 5));
+      } catch (error) {
+        console.error("Failed to fetch mood logs:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchEntries();
+  }, [refreshKey]);
+
+  if (loading) return <div className="text-center py-4 text-xs text-muted-foreground font-body">Loading...</div>;
   if (entries.length === 0) return null;
 
   return (
     <div className="flex flex-col gap-2">
       <h3 className="font-heading text-[14px] font-bold text-muted-foreground px-1">Recent Entries</h3>
       {entries.map((entry) => (
-        <SwipeableEntry key={entry.id} entry={entry} onRemove={() => { removeEntry(entry.id); onRefresh(); }} />
+        <SwipeableEntry
+          key={entry.id}
+          entry={entry}
+          onRemove={async () => {
+            const userId = getUserId();
+            if (!userId) return;
+            try {
+              await deleteMoodLog(userId, entry.id);
+              onRefresh();
+              toast("Entry removed");
+            } catch (error) {
+              console.error("Failed to remove mood log:", error);
+              toast.error("Failed to remove entry");
+            }
+          }}
+        />
       ))}
-      {getEntries().length > 5 && (
-        <button onClick={onOpenHistory} className="font-body text-[13px] text-primary font-medium text-center py-2">
-          View all
-        </button>
-      )}
+      <button onClick={onOpenHistory} className="font-body text-[13px] text-primary font-medium text-center py-2">
+        View all
+      </button>
     </div>
   );
 };
 
-function SwipeableEntry({ entry, onRemove }: { entry: MoodEntry; onRemove: () => void }) {
+function SwipeableEntry({ entry, onRemove }: { entry: MoodEntry; onRemove: () => Promise<void> }) {
   const [offset, setOffset] = useState(0);
   const startX = useRef(0);
   const dragging = useRef(false);

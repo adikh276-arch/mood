@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { MOODS, FACTORS, INTENSITY_LABELS, MoodType, MoodEntry } from "@/types/mood";
-import { saveEntry, generateId, formatTimeIST } from "@/lib/moodStorage";
+import { getUserId } from "@/lib/auth";
+import { saveMoodLog } from "@/lib/db";
+import { generateId, formatTimeIST } from "@/lib/moodStorage";
 import { toast } from "sonner";
 
 interface LogCardProps {
@@ -27,9 +29,14 @@ const LogCard = ({ onSaved }: LogCardProps) => {
     setFactors((prev) => prev.includes(f) ? prev.filter((x) => x !== f) : [...prev, f]);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!mood) {
       toast("Select a mood to save.");
+      return;
+    }
+    const userId = getUserId();
+    if (!userId) {
+      toast.error("User session not found");
       return;
     }
     const entry: MoodEntry = {
@@ -41,16 +48,21 @@ const LogCard = ({ onSaved }: LogCardProps) => {
       tobaccoUrge,
       notes: notes.trim(),
     };
-    saveEntry(entry);
-    toast("Entry saved.");
-    setMood(null);
-    setIntensity(3);
-    setFactors([]);
-    setTobaccoUrge("none");
-    setNotes("");
-    setTimestamp(new Date().toISOString());
-    setEditingTime(false);
-    onSaved();
+    try {
+      await saveMoodLog(userId, entry);
+      toast("Entry saved.");
+      setMood(null);
+      setIntensity(3);
+      setFactors([]);
+      setTobaccoUrge("none");
+      setNotes("");
+      setTimestamp(new Date().toISOString());
+      setEditingTime(false);
+      onSaved();
+    } catch (error) {
+      console.error("Failed to save mood log:", error);
+      toast.error("Failed to save entry");
+    }
   };
 
   const urges: ("none" | "mild" | "strong")[] = ["none", "mild", "strong"];
@@ -67,11 +79,10 @@ const LogCard = ({ onSaved }: LogCardProps) => {
             <button
               key={m.type}
               onClick={() => setMood(m.type)}
-              className={`flex flex-col items-center justify-center rounded-xl border p-3 transition-all duration-150 active:scale-[1.04] ${
-                mood === m.type
+              className={`flex flex-col items-center justify-center rounded-xl border p-3 transition-all duration-150 active:scale-[1.04] ${mood === m.type
                   ? "bg-primary-light border-2 border-primary"
                   : "bg-surface-2 border-border"
-              }`}
+                }`}
               style={{ minHeight: 80 }}
             >
               <span className="text-[26px] leading-none">{m.emoji}</span>
@@ -133,11 +144,10 @@ const LogCard = ({ onSaved }: LogCardProps) => {
             <button
               key={u}
               onClick={() => setTobaccoUrge(u)}
-              className={`text-center py-2.5 rounded-xl border font-body text-[13px] transition-all duration-150 ${
-                tobaccoUrge === u
+              className={`text-center py-2.5 rounded-xl border font-body text-[13px] transition-all duration-150 ${tobaccoUrge === u
                   ? "bg-primary-light border-primary text-accent-foreground font-medium"
                   : "bg-surface-2 border-border text-muted-foreground"
-              }`}
+                }`}
             >
               {u.charAt(0).toUpperCase() + u.slice(1)}
             </button>
